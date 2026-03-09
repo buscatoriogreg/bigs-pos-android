@@ -357,6 +357,7 @@ private fun CartItemRow(
     HorizontalDivider(color = Color(0xFFEEEEEE))
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PaymentDialog(
     subtotal: Double,
