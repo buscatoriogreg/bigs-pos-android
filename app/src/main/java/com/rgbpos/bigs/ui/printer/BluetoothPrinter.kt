@@ -57,39 +57,59 @@ class BluetoothPrinter(private val device: BluetoothDevice) {
     fun printReceipt(receipt: Receipt) {
         val os = outputStream ?: throw IOException("Not connected")
 
-        os.write(ESC_INIT)
+        // Build entire receipt into a single byte buffer
+        val buf = java.io.ByteArrayOutputStream(2048)
+
+        buf.write(ESC_INIT)
+        Thread.sleep(100)
 
         for (line in receipt.lines) {
             when (line) {
                 is ReceiptLine.Text -> {
-                    os.write(alignCommand(line.align))
-                    if (line.bold) os.write(ESC_BOLD_ON)
-                    if (line.doubleHeight) os.write(ESC_DOUBLE_HEIGHT)
-                    os.write("${line.text}\n".toByteArray(Charsets.UTF_8))
-                    if (line.doubleHeight) os.write(ESC_NORMAL_SIZE)
-                    if (line.bold) os.write(ESC_BOLD_OFF)
+                    buf.write(alignCommand(line.align))
+                    if (line.bold) buf.write(ESC_BOLD_ON)
+                    if (line.doubleHeight) buf.write(ESC_DOUBLE_HEIGHT)
+                    buf.write("${line.text}\n".toByteArray(Charsets.UTF_8))
+                    if (line.doubleHeight) buf.write(ESC_NORMAL_SIZE)
+                    if (line.bold) buf.write(ESC_BOLD_OFF)
                 }
                 is ReceiptLine.TwoColumn -> {
-                    os.write(ESC_ALIGN_LEFT)
-                    if (line.bold) os.write(ESC_BOLD_ON)
+                    buf.write(ESC_ALIGN_LEFT)
+                    if (line.bold) buf.write(ESC_BOLD_ON)
                     val formatted = twoCol(line.left, line.right, 32)
-                    os.write("$formatted\n".toByteArray(Charsets.UTF_8))
-                    if (line.bold) os.write(ESC_BOLD_OFF)
+                    buf.write("$formatted\n".toByteArray(Charsets.UTF_8))
+                    if (line.bold) buf.write(ESC_BOLD_OFF)
                 }
                 is ReceiptLine.Separator -> {
-                    os.write(ESC_ALIGN_LEFT)
-                    os.write("${"-".repeat(32)}\n".toByteArray(Charsets.UTF_8))
+                    buf.write(ESC_ALIGN_LEFT)
+                    buf.write("${"-".repeat(32)}\n".toByteArray(Charsets.UTF_8))
                 }
                 is ReceiptLine.Blank -> {
-                    os.write("\n".toByteArray(Charsets.UTF_8))
+                    buf.write("\n".toByteArray(Charsets.UTF_8))
                 }
             }
         }
 
         // Feed and cut
-        os.write(ESC_FEED_3)
-        os.write(ESC_FEED_CUT)
-        os.flush()
+        buf.write(ESC_FEED_3)
+        buf.write(ESC_FEED_CUT)
+
+        // Write in small chunks to avoid Bluetooth buffer overflow
+        val data = buf.toByteArray()
+        val chunkSize = 256
+        var offset = 0
+        while (offset < data.size) {
+            val end = minOf(offset + chunkSize, data.size)
+            os.write(data, offset, end - offset)
+            os.flush()
+            offset = end
+            if (offset < data.size) {
+                Thread.sleep(50)
+            }
+        }
+
+        // Final pause to let printer finish
+        Thread.sleep(200)
     }
 
     private fun alignCommand(align: Align): ByteArray = when (align) {
