@@ -26,6 +26,26 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
+      - name: Restore cached keystore
+        uses: actions/cache@v4
+        id: keystore-cache
+        with:
+          path: app/keystore/bigs-pos.jks
+          key: bigs-pos-keystore-v1
+
+      - name: Generate keystore if not cached
+        if: steps.keystore-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p app/keystore
+          keytool -genkeypair -v \
+            -keystore app/keystore/bigs-pos.jks \
+            -alias bigspos \
+            -keyalg RSA -keysize 2048 \
+            -validity 36500 \
+            -storepass bigspos2026 \
+            -keypass bigspos2026 \
+            -dname "CN=BigsPOS,OU=Dev,O=RGBPos,L=Manila,S=NCR,C=PH"
+
       - name: Build Debug APK
         run: gradle assembleDebug
 

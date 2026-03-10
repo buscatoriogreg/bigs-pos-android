@@ -21,7 +21,25 @@ android {
         buildConfigField("String", "UPDATE_URL", "\"https://bigs.rgbpos.com/downloads/version.json\"")
     }
 
+    signingConfigs {
+        create("release") {
+            val ks = file("keystore/bigs-pos.jks")
+            if (ks.exists()) {
+                storeFile = ks
+                storePassword = "bigspos2026"
+                keyAlias = "bigspos"
+                keyPassword = "bigspos2026"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            val ks = file("keystore/bigs-pos.jks")
+            if (ks.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -29,6 +47,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val ks = file("keystore/bigs-pos.jks")
+            if (ks.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
