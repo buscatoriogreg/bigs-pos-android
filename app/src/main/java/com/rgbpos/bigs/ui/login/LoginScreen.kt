@@ -61,21 +61,22 @@ fun LoginScreen(onLoginSuccess: (token: String, userName: String) -> Unit) {
                 }
             } catch (e: Exception) {
                 // Try offline login if network is unavailable and cached data exists
-                val hasValidCredentials = TokenStore.verifyOfflineCredentials(context, username, password)
-                if (!hasValidCredentials) {
-                    error = "Invalid credentials (offline)"
-                    return@launch
-                }
                 val savedToken = TokenStore.getToken(context)
                 val savedName = TokenStore.getUserName(context)
                 val db = AppDatabase.get(context)
                 val hasCachedData = db.productDao().count() > 0
-                if (savedToken != null && savedName != null && hasCachedData) {
-                    ApiClient.setToken(savedToken)
-                    onLoginSuccess(savedToken, savedName)
-                } else {
+                if (savedToken == null || savedName == null || !hasCachedData) {
                     error = "No cached data available. Please connect to the internet to login."
+                    return@launch
                 }
+                // Verify credentials if hash exists, otherwise allow (pre-1.2.0 upgrade)
+                val credentialsOk = TokenStore.verifyOfflineCredentials(context, username, password)
+                if (!credentialsOk) {
+                    error = "Invalid credentials (offline)"
+                    return@launch
+                }
+                ApiClient.setToken(savedToken)
+                onLoginSuccess(savedToken, savedName)
             } finally {
                 loading = false
             }

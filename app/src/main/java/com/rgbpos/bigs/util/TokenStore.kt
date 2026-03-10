@@ -37,7 +37,9 @@ object TokenStore {
 
     suspend fun verifyOfflineCredentials(context: Context, username: String, password: String): Boolean {
         val savedHash = context.dataStore.data.map { it[CREDENTIALS_HASH_KEY] }.first()
-        return savedHash != null && savedHash == hashCredentials(username, password)
+        // No hash saved yet (pre-1.2.0 login) — allow offline login
+        if (savedHash == null) return true
+        return savedHash == hashCredentials(username, password)
     }
 
     suspend fun getToken(context: Context): String? {
