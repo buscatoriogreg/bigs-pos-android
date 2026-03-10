@@ -56,6 +56,7 @@ fun PosScreen(
     var snackMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     var updateInfo by remember { mutableStateOf<VersionInfo?>(null) }
+    var isGridView by remember { mutableStateOf(true) }
 
     // Check for app update on launch
     LaunchedEffect(Unit) {
@@ -119,33 +120,54 @@ fun PosScreen(
             Row(Modifier.fillMaxSize().padding(padding)) {
                 // Left: Products
                 Column(Modifier.weight(0.6f).fillMaxHeight().padding(8.dp)) {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(bottom = 8.dp),
                     ) {
-                        item {
-                            FilterChip(
-                                selected = vm.selectedCategoryId == 0,
-                                onClick = { vm.selectCategory(0) },
-                                label = { Text("All") },
-                            )
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            item {
+                                FilterChip(
+                                    selected = vm.selectedCategoryId == 0,
+                                    onClick = { vm.selectCategory(0) },
+                                    label = { Text("All") },
+                                )
+                            }
+                            items(vm.categories) { cat ->
+                                FilterChip(
+                                    selected = vm.selectedCategoryId == cat.id,
+                                    onClick = { vm.selectCategory(cat.id) },
+                                    label = { Text(cat.name) },
+                                )
+                            }
                         }
-                        items(vm.categories) { cat ->
-                            FilterChip(
-                                selected = vm.selectedCategoryId == cat.id,
-                                onClick = { vm.selectCategory(cat.id) },
-                                label = { Text(cat.name) },
+                        IconButton(onClick = { isGridView = !isGridView }) {
+                            Icon(
+                                if (isGridView) Icons.Default.ViewList else Icons.Default.GridView,
+                                contentDescription = if (isGridView) "List view" else "Grid view",
                             )
                         }
                     }
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 140.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(vm.filteredProducts, key = { it.id }) { product ->
-                            ProductCard(product) { vm.addToCart(product) }
+                    if (isGridView) {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 140.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(vm.filteredProducts, key = { it.id }) { product ->
+                                ProductCard(product) { vm.addToCart(product) }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(vm.filteredProducts, key = { it.id }) { product ->
+                                ProductListItem(product) { vm.addToCart(product) }
+                            }
                         }
                     }
                 }
@@ -357,6 +379,43 @@ private fun ProductCard(product: Product, onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
             )
+        }
+    }
+}
+
+@Composable
+private fun ProductListItem(product: Product, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(1.dp),
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (product.imageUrl != null) {
+                AsyncImage(
+                    model = product.imageUrl,
+                    contentDescription = product.name,
+                    modifier = Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)),
+                )
+            } else {
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFDFE8F1)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(product.name.take(2).uppercase(), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(product.name, fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                product.categoryName?.let {
+                    Text(it, fontSize = 11.sp, color = Color.Gray)
+                }
+            }
+            Text(formatPeso(product.price), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
