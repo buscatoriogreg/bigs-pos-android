@@ -15,13 +15,29 @@ object TokenStore {
     private val USER_ROLE_KEY = stringPreferencesKey("user_role")
     private val PRINTER_MAC_KEY = stringPreferencesKey("printer_mac")
     private val PRINTER_NAME_KEY = stringPreferencesKey("printer_name")
+    private val CREDENTIALS_HASH_KEY = stringPreferencesKey("credentials_hash")
 
-    suspend fun saveLogin(context: Context, token: String, userName: String, role: String) {
+    private fun hashCredentials(username: String, password: String): String {
+        val bytes = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("$username:$password".toByteArray())
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    suspend fun saveLogin(context: Context, token: String, userName: String, role: String,
+                          username: String? = null, password: String? = null) {
         context.dataStore.edit { prefs ->
             prefs[TOKEN_KEY] = token
             prefs[USER_NAME_KEY] = userName
             prefs[USER_ROLE_KEY] = role
+            if (username != null && password != null) {
+                prefs[CREDENTIALS_HASH_KEY] = hashCredentials(username, password)
+            }
         }
+    }
+
+    suspend fun verifyOfflineCredentials(context: Context, username: String, password: String): Boolean {
+        val savedHash = context.dataStore.data.map { it[CREDENTIALS_HASH_KEY] }.first()
+        return savedHash != null && savedHash == hashCredentials(username, password)
     }
 
     suspend fun getToken(context: Context): String? {

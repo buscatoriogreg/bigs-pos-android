@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rgbpos.bigs.data.api.ApiClient
+import com.rgbpos.bigs.data.local.AppDatabase
 import com.rgbpos.bigs.data.model.LoginRequest
 import com.rgbpos.bigs.util.TokenStore
 import kotlinx.coroutines.launch
@@ -52,13 +53,29 @@ fun LoginScreen(onLoginSuccess: (token: String, userName: String) -> Unit) {
                 val resp = ApiClient.service.login(LoginRequest(username, password))
                 if (resp.isSuccessful && resp.body() != null) {
                     val body = resp.body()!!
-                    TokenStore.saveLogin(context, body.token, body.user.fullName, body.user.role)
+                    TokenStore.saveLogin(context, body.token, body.user.fullName, body.user.role,
+                        username = username, password = password)
                     onLoginSuccess(body.token, body.user.fullName)
                 } else {
                     error = "Invalid credentials"
                 }
             } catch (e: Exception) {
-                error = "Connection error: ${e.localizedMessage}"
+                // Try offline login if network is unavailable and cached data exists
+                val hasValidCredentials = TokenStore.verifyOfflineCredentials(context, username, password)
+                if (!hasValidCredentials) {
+                    error = "Invalid credentials (offline)"
+                    return@launch
+                }
+                val savedToken = TokenStore.getToken(context)
+                val savedName = TokenStore.getUserName(context)
+                val db = AppDatabase.get(context)
+                val hasCachedData = db.productDao().count() > 0
+                if (savedToken != null && savedName != null && hasCachedData) {
+                    ApiClient.setToken(savedToken)
+                    onLoginSuccess(savedToken, savedName)
+                } else {
+                    error = "No cached data available. Please connect to the internet to login."
+                }
             } finally {
                 loading = false
             }
