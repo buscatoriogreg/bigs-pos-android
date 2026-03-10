@@ -9,3 +9,9 @@
 # Kotlinx Serialization
 -keepattributes RuntimeVisibleAnnotations
 -keep class kotlinx.serialization.** { *; }
+
+# Room
+-keep class com.rgbpos.bigs.data.local.** { *; }
+
+# Update model
+-keep class com.rgbpos.bigs.ui.update.VersionInfo { *; }

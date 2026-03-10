@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -26,11 +25,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
 import com.rgbpos.bigs.data.model.*
 import com.rgbpos.bigs.ui.printer.PrinterDialog
 import com.rgbpos.bigs.ui.printer.ReceiptFormatter
+import com.rgbpos.bigs.ui.update.AppUpdater
+import com.rgbpos.bigs.ui.update.VersionInfo
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -53,6 +55,13 @@ fun PosScreen(
     var orderToPrint by remember { mutableStateOf<OrderResponse?>(null) }
     var snackMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    var updateInfo by remember { mutableStateOf<VersionInfo?>(null) }
+
+    // Check for app update on launch
+    LaunchedEffect(Unit) {
+        val info = AppUpdater.checkForUpdate()
+        if (info != null) updateInfo = info
+    }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -66,7 +75,21 @@ fun PosScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("Big's Crispy Lechon Belly", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Big's Crispy Lechon Belly", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        if (!vm.isOnline) {
+                            Spacer(Modifier.width(8.dp))
+                            Badge(containerColor = Color(0xFFE74C3C)) {
+                                Text("OFFLINE", fontSize = 9.sp)
+                            }
+                        }
+                        if (vm.pendingCount > 0) {
+                            Spacer(Modifier.width(6.dp))
+                            Badge(containerColor = Color(0xFFF39C12)) {
+                                Text("${vm.pendingCount} pending", fontSize = 9.sp)
+                            }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -75,8 +98,8 @@ fun PosScreen(
                 ),
                 actions = {
                     Text(userName, color = Color.White, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp))
-                    IconButton(onClick = { vm.loadData() }) {
-                        Icon(Icons.Default.Refresh, "Refresh")
+                    IconButton(onClick = { vm.syncFromServer() }) {
+                        Icon(Icons.Default.Refresh, "Sync")
                     }
                     IconButton(onClick = { showPrinter = true }) {
                         Icon(Icons.Default.Print, "Printer")
@@ -96,7 +119,6 @@ fun PosScreen(
             Row(Modifier.fillMaxSize().padding(padding)) {
                 // Left: Products
                 Column(Modifier.weight(0.6f).fillMaxHeight().padding(8.dp)) {
-                    // Category filter
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.padding(bottom = 8.dp),
@@ -117,7 +139,6 @@ fun PosScreen(
                         }
                     }
 
-                    // Product grid
                     LazyVerticalGrid(
                         columns = GridCells.Adaptive(minSize = 140.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -135,7 +156,6 @@ fun PosScreen(
                     elevation = CardDefaults.cardElevation(4.dp),
                 ) {
                     Column(Modifier.fillMaxSize()) {
-                        // Cart header
                         Row(
                             Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primary).padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -147,7 +167,6 @@ fun PosScreen(
                             }
                         }
 
-                        // Cart items
                         if (vm.cart.isEmpty()) {
                             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                                 Text("No items in cart", color = Color.Gray)
@@ -165,7 +184,6 @@ fun PosScreen(
                             }
                         }
 
-                        // Cart footer
                         Column(Modifier.fillMaxWidth().background(Color(0xFFF8F9FA)).padding(12.dp)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Items", color = Color.Gray, fontSize = 13.sp)
@@ -208,6 +226,7 @@ fun PosScreen(
             subtotal = vm.subtotal,
             customers = vm.customers,
             submitting = vm.submitting,
+            isOnline = vm.isOnline,
             onDismiss = { showPayment = false },
             onComplete = { customerId, orderType, discount ->
                 vm.completeOrder(
@@ -217,7 +236,8 @@ fun PosScreen(
                     onSuccess = { order ->
                         showPayment = false
                         orderToPrint = order
-                        snackMessage = "Order ${order.orderNumber} completed!"
+                        val prefix = if (order.orderNumber.startsWith("OFFLINE")) "(Offline) " else ""
+                        snackMessage = "${prefix}Order ${order.orderNumber} completed!"
                     },
                     onError = { msg -> snackMessage = msg },
                 )
@@ -225,7 +245,7 @@ fun PosScreen(
         )
     }
 
-    // Print receipt dialog after order
+    // Print receipt after order
     orderToPrint?.let { order ->
         AlertDialog(
             onDismissRequest = { orderToPrint = null },
@@ -239,9 +259,7 @@ fun PosScreen(
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    showPrinter = true
-                }) { Text("Print") }
+                Button(onClick = { showPrinter = true }) { Text("Print") }
             },
             dismissButton = {
                 TextButton(onClick = { orderToPrint = null }) { Text("Skip") }
@@ -252,9 +270,7 @@ fun PosScreen(
     // Printer dialog
     if (showPrinter) {
         PrinterDialog(
-            onDismiss = {
-                showPrinter = false
-            },
+            onDismiss = { showPrinter = false },
             onPrint = { printer ->
                 val order = orderToPrint ?: vm.lastOrder
                 if (order != null) {
@@ -266,6 +282,32 @@ fun PosScreen(
                     snackMessage = "No order to print"
                 }
                 showPrinter = false
+            },
+        )
+    }
+
+    // Update available dialog
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("Update Available") },
+            text = {
+                Column {
+                    Text("Version ${info.version_name} is available.")
+                    if (info.changelog.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(info.changelog, fontSize = 13.sp, color = Color.Gray)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    AppUpdater.downloadAndInstall(context, info)
+                    updateInfo = null
+                }) { Text("Update Now") }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfo = null }) { Text("Later") }
             },
         )
     }
@@ -327,9 +369,26 @@ private fun CartItemRow(
     onRemove: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Thumbnail
+        if (item.imageUrl != null) {
+            AsyncImage(
+                model = item.imageUrl,
+                contentDescription = item.name,
+                modifier = Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)),
+            )
+        } else {
+            Box(
+                Modifier.size(36.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFDFE8F1)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(item.name.take(2).uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+
         Column(Modifier.weight(1f)) {
             Text(item.name, fontWeight = FontWeight.Medium, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text("${formatPeso(item.price)} x ${item.quantity}", fontSize = 12.sp, color = Color.Gray)
@@ -363,6 +422,7 @@ private fun PaymentDialog(
     subtotal: Double,
     customers: List<Customer>,
     submitting: Boolean,
+    isOnline: Boolean,
     onDismiss: () -> Unit,
     onComplete: (customerId: Int?, orderType: String, discount: Double) -> Unit,
 ) {
@@ -381,7 +441,20 @@ private fun PaymentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Payment") },
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+        modifier = Modifier
+            .widthIn(max = 420.dp)
+            .padding(16.dp)
+            .imePadding(),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Payment")
+                if (!isOnline) {
+                    Spacer(Modifier.width(8.dp))
+                    Badge(containerColor = Color(0xFFE74C3C)) { Text("OFFLINE", fontSize = 9.sp) }
+                }
+            }
+        },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

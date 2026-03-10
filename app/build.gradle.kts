@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -13,10 +14,11 @@ android {
         applicationId = "com.rgbpos.bigs"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://bigs.rgbpos.com/api/\"")
+        buildConfigField("String", "UPDATE_URL", "\"https://bigs.rgbpos.com/downloads/version.json\"")
     }
 
     buildTypes {
@@ -75,6 +77,11 @@ dependencies {
 
     // DataStore for token persistence
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Room (offline database)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
