@@ -24,7 +24,6 @@ object ReceiptFormatter {
         // Header
         lines += ReceiptLine.Text("Big's Crispy Lechon Belly", Align.CENTER, bold = true, doubleHeight = true)
         lines += ReceiptLine.Blank
-        lines += ReceiptLine.Text("Official Receipt", Align.CENTER)
         lines += ReceiptLine.Separator
 
         // Order info
