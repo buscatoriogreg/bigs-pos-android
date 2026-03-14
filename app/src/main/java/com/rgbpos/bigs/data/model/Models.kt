@@ -49,6 +49,7 @@ data class OrderRequest(
     @SerialName("customer_id") val customerId: Int? = null,
     @SerialName("order_type") val orderType: String = "dine-in",
     val discount: Double = 0.0,
+    @SerialName("senior_pwd_discount") val seniorPwdDiscount: Boolean = false,
 )
 
 @Serializable

@@ -161,9 +161,8 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
     val itemCount: Int get() = cart.sumOf { it.quantity }
 
     fun completeOrder(
-        customerId: Int?,
         orderType: String,
-        discount: Double,
+        seniorPwdDiscount: Boolean,
         onSuccess: (OrderResponse) -> Unit,
         onError: (String) -> Unit,
     ) {
@@ -175,12 +174,10 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
         submitting = true
         viewModelScope.launch {
             val orderItems = cart.map { OrderItemRequest(it.productId, it.quantity) }
-            val discountVal = maxOf(0.0, discount)
             val sub = subtotal
+            val discountVal = if (seniorPwdDiscount) kotlin.math.round(sub * 0.20 * 100) / 100 else 0.0
             val tot = sub - discountVal
-            val custName = if (customerId != null) {
-                customers.find { it.id == customerId }?.name ?: "Customer"
-            } else "Walk-in"
+            val custName = "Walk-in"
 
             // Build receipt items snapshot from cart (for offline receipt)
             val receiptItems = cart.map {
@@ -197,9 +194,9 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
                 try {
                     val request = OrderRequest(
                         items = orderItems,
-                        customerId = customerId,
                         orderType = orderType,
                         discount = discountVal,
+                        seniorPwdDiscount = seniorPwdDiscount,
                     )
                     val resp = ApiClient.service.createOrder(request)
                     if (resp.isSuccessful && resp.body() != null) {
@@ -212,7 +209,7 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 } catch (_: Exception) {
                     // Network failed — save offline
-                    saveOrderOffline(orderItems, customerId, orderType, discountVal, receiptItems, sub, tot, custName)
+                    saveOrderOffline(orderItems, null, orderType, discountVal, receiptItems, sub, tot, custName)
                     val offlineOrder = buildOfflineOrderResponse(orderType, custName, receiptItems, sub, discountVal, tot)
                     lastOrder = offlineOrder
                     cart.clear()
@@ -220,7 +217,7 @@ class PosViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } else {
                 // Offline — save locally
-                saveOrderOffline(orderItems, customerId, orderType, discountVal, receiptItems, sub, tot, custName)
+                saveOrderOffline(orderItems, null, orderType, discountVal, receiptItems, sub, tot, custName)
                 val offlineOrder = buildOfflineOrderResponse(orderType, custName, receiptItems, sub, discountVal, tot)
                 lastOrder = offlineOrder
                 cart.clear()

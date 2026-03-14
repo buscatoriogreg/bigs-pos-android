@@ -246,15 +246,13 @@ fun PosScreen(
     if (showPayment) {
         PaymentDialog(
             subtotal = vm.subtotal,
-            customers = vm.customers,
             submitting = vm.submitting,
             isOnline = vm.isOnline,
             onDismiss = { showPayment = false },
-            onComplete = { customerId, orderType, discount ->
+            onComplete = { orderType, seniorPwd ->
                 vm.completeOrder(
-                    customerId = customerId,
                     orderType = orderType,
-                    discount = discount,
+                    seniorPwdDiscount = seniorPwd,
                     onSuccess = { order ->
                         showPayment = false
                         orderToPrint = order
@@ -479,24 +477,38 @@ private fun CartItemRow(
 @Composable
 private fun PaymentDialog(
     subtotal: Double,
-    customers: List<Customer>,
     submitting: Boolean,
     isOnline: Boolean,
     onDismiss: () -> Unit,
-    onComplete: (customerId: Int?, orderType: String, discount: Double) -> Unit,
+    onComplete: (orderType: String, seniorPwd: Boolean) -> Unit,
 ) {
-    var discount by remember { mutableStateOf("0") }
+    var seniorPwd by remember { mutableStateOf(false) }
     var cashTendered by remember { mutableStateOf("") }
-    var selectedCustomerId by remember { mutableStateOf<Int?>(null) }
     var orderType by remember { mutableStateOf("dine-in") }
-    var customerExpanded by remember { mutableStateOf(false) }
     var typeExpanded by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    val discountVal = discount.toDoubleOrNull() ?: 0.0
+    val discountVal = if (seniorPwd) kotlin.math.round(subtotal * 0.20 * 100) / 100 else 0.0
     val total = subtotal - discountVal
     val cash = cashTendered.toDoubleOrNull() ?: 0.0
     val change = cash - total
+
+    // Peso denominations closest to total
+    val denominations = remember(total) {
+        if (total <= 0) emptyList()
+        else {
+            val denoms = listOf(50, 100, 200, 500, 1000, 1500, 2000, 3000, 5000)
+            val result = mutableListOf(total) // "Exact" amount
+            var count = 0
+            for (d in denoms) {
+                if (d >= total && count < 4) {
+                    result.add(d.toDouble())
+                    count++
+                }
+            }
+            result.distinct()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -522,15 +534,26 @@ private fun PaymentDialog(
                 }
 
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = discount,
-                    onValueChange = { discount = it },
-                    label = { Text("Discount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    prefix = { Text("\u20B1 ") },
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(
+                        checked = seniorPwd,
+                        onCheckedChange = { seniorPwd = it },
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Senior/PWD 20% Discount", fontSize = 14.sp)
+                }
+                if (seniorPwd) {
+                    Row(Modifier.fillMaxWidth().padding(start = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Discount (20%):", color = Color(0xFF27AE60), fontSize = 14.sp)
+                        Text("-${formatPeso(discountVal)}", color = Color(0xFF27AE60), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    }
+                }
 
+                Spacer(Modifier.height(4.dp))
+                HorizontalDivider()
                 Spacer(Modifier.height(4.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Total:", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -547,6 +570,26 @@ private fun PaymentDialog(
                     prefix = { Text("\u20B1 ") },
                 )
 
+                // Denomination buttons
+                if (denominations.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        denominations.forEach { amount ->
+                            val label = if (amount == total) "Exact" else "\u20B1${pesoFormat.format(amount)}"
+                            OutlinedButton(
+                                onClick = { cashTendered = amount.toLong().let { l -> if (amount == total) amount.toString() else l.toString() } },
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
+                            ) {
+                                Text(label, fontSize = 11.sp, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+
                 if (cash > 0) {
                     Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Change:", fontWeight = FontWeight.Bold)
@@ -559,35 +602,6 @@ private fun PaymentDialog(
                 }
 
                 Spacer(Modifier.height(12.dp))
-
-                // Customer dropdown
-                ExposedDropdownMenuBox(
-                    expanded = customerExpanded,
-                    onExpandedChange = { customerExpanded = it },
-                ) {
-                    OutlinedTextField(
-                        value = customers.find { it.id == selectedCustomerId }?.let { "${it.name} (${it.loyaltyPoints} pts)" } ?: "Walk-in Customer",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Customer") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(customerExpanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    )
-                    ExposedDropdownMenu(expanded = customerExpanded, onDismissRequest = { customerExpanded = false }) {
-                        DropdownMenuItem(text = { Text("Walk-in Customer") }, onClick = {
-                            selectedCustomerId = null
-                            customerExpanded = false
-                        })
-                        customers.forEach { c ->
-                            DropdownMenuItem(text = { Text("${c.name} (${c.loyaltyPoints} pts)") }, onClick = {
-                                selectedCustomerId = c.id
-                                customerExpanded = false
-                            })
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(8.dp))
 
                 // Order type dropdown
                 ExposedDropdownMenuBox(
@@ -625,7 +639,7 @@ private fun PaymentDialog(
                         errorMsg = "Cash tendered is not enough"
                         return@Button
                     }
-                    onComplete(selectedCustomerId, orderType, discountVal)
+                    onComplete(orderType, seniorPwd)
                 },
                 enabled = !submitting,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF27AE60)),

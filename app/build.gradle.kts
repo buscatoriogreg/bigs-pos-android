@@ -14,8 +14,8 @@ android {
         applicationId = "com.rgbpos.bigs"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.3.0"
 
         buildConfigField("String", "API_BASE_URL", "\"https://bigs.rgbpos.com/api/\"")
         buildConfigField("String", "UPDATE_URL", "\"https://bigs.rgbpos.com/downloads/version.json\"")
